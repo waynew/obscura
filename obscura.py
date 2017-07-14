@@ -54,7 +54,9 @@ def get_date_reader(select=None):
             return date
         return exif_reader
     except ImportError:
-        print("WARNING: exif-py is not installed, only using the file timestamps which could be wrong.", file=sys.stderr)
+        print("WARNING: exifread is not installed, only using the file timestamps which could be wrong.", file=sys.stderr)
+        if input('Abort? (y/[n]):').lower() in ('y', 'yes', 'ye', 'si', 'da', 'oui', 'ja'):
+            sys.exit('Please run `python -m pip install --user exifread`, or install it some other way')
         def stat_fallback(f):
             path = Path(f.name)
             # https://stackoverflow.com/a/39501288/344286
@@ -74,23 +76,25 @@ def load_config():
     conf_file = pathlib.Path.home().joinpath('.obscura.conf')
     if not conf.read([conf_file]):
         print(f'WARNING: No Obscura config file found at {conf_file}', file=sys.stderr)
-    return {
-        'src': Path(conf['obscura']['src_folder']),
-        'dst': Path(conf['obscura']['dst_folder']),
-        'extensions': [ext.strip() for ext in conf['obscura']['file_formats'].split(',')],
-        'path_fmt': conf['obscura']['path_format'],
-        'stat_fallback': conf.getboolean('obscura', 'file_timestamp_fallback'),
-        'log_file': Path(conf['obscura']['logpath']),
-        'log_level': conf['obscura']['loglevel'].upper(),
-        'copy_files': conf.getboolean('obscura', 'copy_files'),
-    }
+        return {}
+    else:
+        return {
+            'src': Path(conf['obscura']['src_folder']),
+            'dst': Path(conf['obscura']['dst_folder']),
+            'extensions': [ext.strip() for ext in conf['obscura']['file_formats'].split(',')],
+            'path_fmt': conf['obscura']['path_format'],
+            'stat_fallback': conf.getboolean('obscura', 'file_timestamp_fallback'),
+            'log_file': Path(conf['obscura']['logpath']),
+            'log_level': conf['obscura']['loglevel'].upper(),
+            'copy_files': conf.getboolean('obscura', 'copy_files'),
+        }
 
 
 def copy_all(*, src_folder, dst_folder, date_reader=None, config=None):
     logger.debug('Copying files from %r to %r', src_folder, dst_folder)
     date_reader = date_reader or get_date_reader()
     config = config or load_config()
-    paths_to_walk = [src_folder]
+    paths_to_walk = [Path(src_folder)]
     to_copy = set()
     cr2 = None
     jpg = None
@@ -205,16 +209,17 @@ def init():
 
 if __name__ == '__main__':
     config = load_config()
-    logger.addHandler(logging.FileHandler(config['log_file'], mode=config.get('log_file_mode', 'w')))
-    logger.setLevel(getattr(logging, config['log_level']))
-    logger.info('Logging configured, obscura starting up...')
+    if config.get('log_file'):
+        logger.addHandler(logging.FileHandler(config['log_file'], mode=config.get('log_file_mode', 'w')))
+        logger.setLevel(getattr(logging, config['log_level']))
+        logger.info('Logging configured, obscura starting up...')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--init', action='store_true')
-    parser.add_argument('source', default=config['src'],
+    parser.add_argument('source', default=config.get('src'),
         nargs='?',
-        help=f'path to pictures to import - default {config["src"]}')
+        help=f'path to pictures to import - default {config.get("src")}')
     args = parser.parse_args()
     logger.debug('Args: %r', args)
 
